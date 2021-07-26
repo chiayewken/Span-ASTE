@@ -1,0 +1,15 @@
+Cython==0.29.21
+PYEVALB==0.1.3
+allennlp-models==1.2.2
+allennlp==1.2.2
+botocore==1.19.46
+fire==0.3.1
+nltk==3.5
+numpy==1.19.4
+pandas==1.1.5
+pydantic==1.6.1
+scikit-learn==0.22.2.post1
+spacy==2.2.4
+torch==1.7.0
+torchvision==0.8.1
+transformers==3.4.0
