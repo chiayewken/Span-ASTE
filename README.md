@@ -12,6 +12,16 @@ This repository implements our ACL 2021 research paper [Learning Span-Level Inte
 - Modified data reader: [span_model/data/dataset_readers/span_model.py](span_model/data/dataset_readers/span_model.py)
 - Modeling code: [span_model/models/span_model.py](span_model/models/span_model.py)
 
+### New Data
+To apply the span-based model to a new dataset, you need to create a folder in `aste/data/triplet_data` and include `train.txt`, `dev.txt` and `test.txt`. 
+The data format for each line contains the sentence and a list of triplets:
+
+> sentence#### #### ####[(triplet_0, ..., triplet_n]
+
+Each triplet is a tuple that consists of `(span_a, span_b, label)`. For example:
+
+> The screen is very large and crystal clear with amazing colors and resolution .#### #### ####[([1], [4], 'POS'), ([1], [7], 'POS'), ([10], [9], 'POS'), ([12], [9], 'POS')]
+
 ### Research Citation
 If the code is useful for your research project, we appreciate if you cite the following paper:
 ```
