@@ -10,7 +10,7 @@ pip3 uninstall dataclasses -y  # Compatibility issue with Python > 3.6
 # ASTE Data
 FOLDER=Position-Aware-Tagging-for-ASTE
 if [[ ! -d aste/data ]]; then
-  git clone https://github.com.cnpmjs.org/xuuuluuu/Position-Aware-Tagging-for-ASTE.git
+  git clone https://github.com/xuuuluuu/Position-Aware-Tagging-for-ASTE.git
   cd $FOLDER
   git checkout 32572ce75d243c5ea36f1133ebb5c3247062b60c
   cd -
