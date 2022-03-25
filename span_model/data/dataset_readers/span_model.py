@@ -1,19 +1,19 @@
-import logging
-from typing import Any, Dict, List, Optional, Tuple, DefaultDict, Set, Union
 import json
+import logging
 import pickle as pkl
 import warnings
-
-from overrides import overrides
+from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple, Union
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
-from allennlp.data.fields import (ListField, TextField, SpanField, MetadataField,
-                                  SequenceLabelField, AdjacencyField, LabelField)
-from allennlp.data.instance import Instance
-from allennlp.data.tokenizers import Token
-from allennlp.data.token_indexers import SingleIdTokenIndexer, TokenIndexer
 from allennlp.data.dataset_readers.dataset_utils import enumerate_spans
+from allennlp.data.fields import (AdjacencyField, LabelField, ListField,
+                                  MetadataField, SequenceLabelField, SpanField,
+                                  TextField)
+from allennlp.data.instance import Instance
+from allennlp.data.token_indexers import SingleIdTokenIndexer, TokenIndexer
+from allennlp.data.tokenizers import Token
+from overrides import overrides
 
 from span_model.data.dataset_readers.document import Document, Sentence
 
@@ -21,19 +21,19 @@ logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 
 # New
 import sys
+
 sys.path.append("aste")
-from parsing import DependencyParser
-from pydantic import BaseModel
 from data_utils import BioesTagMaker
+from pydantic import BaseModel
 
 
 class Stats(BaseModel):
-    entity_total:int = 0
-    entity_drop:int = 0
-    relation_total:int = 0
-    relation_drop:int = 0
-    graph_total:int=0
-    graph_edges:int=0
+    entity_total: int = 0
+    entity_drop: int = 0
+    relation_total: int = 0
+    relation_drop: int = 0
+    graph_total: int = 0
+    graph_edges: int = 0
     grid_total: int = 0
     grid_paired: int = 0
 
@@ -48,15 +48,17 @@ class SpanModelReader(DatasetReader):
     Reads a single JSON-formatted file. This is the same file format as used in the
     scierc, but is preprocessed
     """
-    def __init__(self,
-                 max_span_width: int,
-                 token_indexers: Dict[str, TokenIndexer] = None,
-                 **kwargs) -> None:
+
+    def __init__(
+        self,
+        max_span_width: int,
+        token_indexers: Dict[str, TokenIndexer] = None,
+        **kwargs,
+    ) -> None:
         super().__init__(**kwargs)
         # New
         self.stats = Stats()
         self.is_train = False
-        self.dep_parser = DependencyParser()
         self.tag_maker = BioesTagMaker()
 
         print("#" * 80)
@@ -145,11 +147,15 @@ class SpanModelReader(DatasetReader):
     def _process_sentence(self, sent: Sentence, dataset: str):
         # Get the sentence text and define the `text_field`.
         sentence_text = [self._normalize_word(word) for word in sent.text]
-        text_field = TextField([Token(word) for word in sentence_text], self._token_indexers)
+        text_field = TextField(
+            [Token(word) for word in sentence_text], self._token_indexers
+        )
 
         # Enumerate spans.
         spans = []
-        for start, end in enumerate_spans(sentence_text, max_span_width=self._max_span_width):
+        for start, end in enumerate_spans(
+            sentence_text, max_span_width=self._max_span_width
+        ):
             spans.append(SpanField(start, end, text_field))
 
         # New
@@ -174,47 +180,52 @@ class SpanModelReader(DatasetReader):
         fields = {}
         fields["text"] = text_field
         fields["spans"] = span_field
-        # New
-        graph = self.dep_parser.run([sentence_text])[0]
-        self.stats.graph_total += graph.matrix.numel()
-        self.stats.graph_edges += graph.matrix.sum()
-        fields["dep_graph_labels"] = AdjacencyField(
-            indices=graph.indices,
-            sequence_field=text_field,
-            labels=None,  # Pure adjacency matrix without dep labels for now
-            label_namespace=f"{dataset}__dep_graph_labels",
-        )
 
         if sent.ner is not None:
             ner_labels = self._process_ner(span_tuples, sent)
             fields["ner_labels"] = ListField(
-                [LabelField(entry, label_namespace=f"{dataset}__ner_labels")
-                 for entry in ner_labels])
+                [
+                    LabelField(entry, label_namespace=f"{dataset}__ner_labels")
+                    for entry in ner_labels
+                ]
+            )
             fields["tag_labels"] = SequenceLabelField(
-                self._process_tags(sent), text_field, label_namespace=f"{dataset}__tag_labels"
+                self._process_tags(sent),
+                text_field,
+                label_namespace=f"{dataset}__tag_labels",
             )
         if sent.relations is not None:
-            relation_labels, relation_indices = self._process_relations(span_tuples, sent)
+            relation_labels, relation_indices = self._process_relations(
+                span_tuples, sent
+            )
             fields["relation_labels"] = AdjacencyField(
-                indices=relation_indices, sequence_field=span_field, labels=relation_labels,
-                label_namespace=f"{dataset}__relation_labels")
+                indices=relation_indices,
+                sequence_field=span_field,
+                labels=relation_labels,
+                label_namespace=f"{dataset}__relation_labels",
+            )
             fields["grid_labels"] = AdjacencyField(
-                indices=self._process_grid(sent), sequence_field=text_field, labels=None,
-                label_namespace=f"{dataset}__grid_labels"
+                indices=self._process_grid(sent),
+                sequence_field=text_field,
+                labels=None,
+                label_namespace=f"{dataset}__grid_labels",
             )
 
         return fields
 
     def _process_sentence_fields(self, doc: Document):
         # Process each sentence.
-        sentence_fields = [self._process_sentence(sent, doc.dataset) for sent in doc.sentences]
+        sentence_fields = [
+            self._process_sentence(sent, doc.dataset) for sent in doc.sentences
+        ]
 
         # Make sure that all sentences have the same set of keys.
         first_keys = set(sentence_fields[0].keys())
         for entry in sentence_fields:
             if set(entry.keys()) != first_keys:
                 raise SpanModelDataException(
-                    f"Keys do not match across sentences for document {doc.doc_key}.")
+                    f"Keys do not match across sentences for document {doc.doc_key}."
+                )
 
         # For each field, store the data from all sentences together in a ListField.
         fields = {}
@@ -235,8 +246,10 @@ class SpanModelReader(DatasetReader):
         # Make sure there are no single-token sentences; these break things.
         sent_lengths = [len(x) for x in doc.sentences]
         if min(sent_lengths) < 2:
-            msg = (f"Document {doc.doc_key} has a sentence with a single token or no tokens. "
-                   "This may break the modeling code.")
+            msg = (
+                f"Document {doc.doc_key} has a sentence with a single token or no tokens. "
+                "This may break the modeling code."
+            )
             warnings.warn(msg)
 
         fields = self._process_sentence_fields(doc)

@@ -3,7 +3,7 @@ import json
 from collections import Counter
 from enum import Enum
 from pathlib import Path
-from typing import List, Tuple, Optional, Dict, Set
+from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,8 +11,7 @@ from pydantic import BaseModel
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
 
-from evaluation import TagReader, LinearInstance, nereval
-from parsing import PosTagger
+from evaluation import LinearInstance, TagReader, nereval
 from utils import count_joins, get_simple_stats
 
 RawTriple = Tuple[List[int], int, int, int, int]
@@ -100,7 +99,8 @@ class SentimentTriple(BaseModel):
 class TripleHeuristic(BaseModel):
     @staticmethod
     def run(
-        opinion_to_label: Dict[Span, LabelEnum], target_to_label: Dict[Span, LabelEnum],
+        opinion_to_label: Dict[Span, LabelEnum],
+        target_to_label: Dict[Span, LabelEnum],
     ) -> List[SentimentTriple]:
         # For each target, pair with the closest opinion (and vice versa)
         spans_o = list(opinion_to_label.keys())
@@ -320,45 +320,6 @@ class Data(BaseModel):
         analyzer = ResultAnalyzer()
         analyzer.run(pred, gold=self.sentences, print_limit=0)
 
-    def analyze_pos_patterns(self):
-        print("\nCan we use POS patterns to extract triples?")
-        sents = self.sentences[:1000]
-        tagger = PosTagger()
-        s: Sentence
-
-        tags = tagger.run([s.tokens for s in sents])
-        s_train, s_dev, tags_train, tags_dev = train_test_split(
-            sents, tags, test_size=0.2, random_state=42
-        )
-        patterns: Set[Tuple[str, ...]] = set()
-        for s, tags in zip(s_train, tags_train):
-            for t in s.triples:
-                start = min(t.t_start, t.o_start)
-                end = max(t.t_end, t.o_end)
-                assert len(s.tokens) == len(tags)
-                _tokens = s.tokens[start : end + 1]
-                _tags = tags[start : end + 1]
-                patterns.add(tuple(_tags))
-
-        patterns_dev: Set[Tuple[str, ...]] = set()
-        for s, tags in zip(s_dev, tags_dev):
-            for t in s.triples:
-                start = min(t.t_start, t.o_start)
-                end = max(t.t_end, t.o_end)
-                assert len(s.tokens) == len(tags)
-                _tokens = s.tokens[start : end + 1]
-                _tags = tags[start : end + 1]
-                patterns_dev.add(tuple(_tags))
-
-        print(
-            dict(
-                triples=len([t for s in sents for t in s.triples]),
-                patterns=len(patterns),
-                patterns_dev=len(patterns_dev),
-                overlap=len(patterns.intersection(patterns_dev)),
-            )
-        )
-
     def analyze_ner(self):
         print("\n How many opinion/target per sentence?")
         num_o, num_t = [], []
@@ -429,7 +390,6 @@ class Data(BaseModel):
         self.analyze_span_distance()
         self.analyze_opinion_labels()
         self.analyze_tag_score()
-        self.analyze_pos_patterns()
         print("#" * 80)
 
 
