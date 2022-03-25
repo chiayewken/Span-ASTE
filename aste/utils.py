@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 from typing import List, Set, Tuple, Union
 
+from fire import Fire
 from pydantic import BaseModel
 
 
@@ -123,6 +124,23 @@ def test_update_nested_dict():
     print(update_nested_dict(d, k="top__middle_a__last", v=1))
 
 
+def clean_up_triplet_data(path: str):
+    outputs = []
+    with open(path) as f:
+        for line in f:
+            sep = "####"
+            text, tags_t, tags_o, triplets = line.split(sep)
+            outputs.append(sep.join([text, " ", " ", triplets]))
+
+    with open(path, "w") as f:
+        f.write("".join(outputs))
+
+
+def clean_up_many(pattern: str = "data/triplet_data/*/*.txt"):
+    for path in sorted(Path().glob(pattern)):
+        print(path)
+        clean_up_triplet_data(str(path))
+
+
 if __name__ == "__main__":
-    test_shell()
-    test_update_nested_dict()
+    Fire()

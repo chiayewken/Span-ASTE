@@ -1,3 +1,12 @@
 *__pycache__
 *.pyc
+*.log
+*.csv
+*.swp
+tags
+punkt.zip
+wordnet.zip
 .idea/
+aste/data/
+models/
+model_outputs/
