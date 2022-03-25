@@ -4,13 +4,9 @@ import pickle
 import subprocess
 import time
 from pathlib import Path
-from typing import Set, List, Tuple, Union
+from typing import List, Set, Tuple, Union
 
-import pandas as pd
-import spacy
 from pydantic import BaseModel
-from spacy.lang.en import English
-from spacy.tokens import Doc, Token
 
 
 class Shell(BaseModel):
@@ -87,7 +83,11 @@ class FlexiModel(BaseModel):
 
 
 def get_simple_stats(numbers: List[Union[int, float]]):
-    return dict(min=min(numbers), max=max(numbers), avg=sum(numbers) / len(numbers),)
+    return dict(
+        min=min(numbers),
+        max=max(numbers),
+        avg=sum(numbers) / len(numbers),
+    )
 
 
 def count_joins(spans: Set[Tuple[int, int]]) -> int:
@@ -100,36 +100,6 @@ def count_joins(spans: Set[Tuple[int, int]]) -> int:
             if b_start <= a_start <= b_end + 1 or b_start - 1 <= a_end <= b_end:
                 count += 1
     return count // 2
-
-
-def test_spacy():
-    texts = [
-        "Autonomous cars are bad because they shift liability to manufacturers.",
-        "I enjoyed this book very much.",
-        "The design is nice and convenient.",
-        "this speaker sucks",
-        "I was disappointed in this.",
-    ]
-    nlp: English = spacy.load("en_core_web_sm")
-    token: Token
-    doc: Doc
-    for doc in nlp.pipe(texts):
-        records = []
-        for token in doc:
-            records.append(
-                dict(
-                    i=token.i,
-                    text=token.text,
-                    pos=token.pos_,
-                    dep=token.dep_,
-                    head=token.head,
-                    head_pos=token.head.pos_,
-                    children=list(token.children),
-                )
-            )
-        print(pd.DataFrame(records))
-        print(dict(chunks=list(doc.noun_chunks)))
-        print("#" * 80)
 
 
 def update_nested_dict(d: dict, k: str, v, i=0, sep="__"):
@@ -155,5 +125,4 @@ def test_update_nested_dict():
 
 if __name__ == "__main__":
     test_shell()
-    test_spacy()
     test_update_nested_dict()
