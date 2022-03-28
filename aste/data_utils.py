@@ -1,5 +1,6 @@
 import copy
 import json
+import os
 from collections import Counter
 from enum import Enum
 from pathlib import Path
@@ -7,6 +8,7 @@ from typing import Dict, List, Optional, Set, Tuple
 
 import numpy as np
 import pandas as pd
+from fire import Fire
 from pydantic import BaseModel
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
@@ -195,11 +197,27 @@ class Sentence(BaseModel):
             tokens[t.t_end] = tokens[t.t_end] + "]"
         return " ".join(tokens)
 
+    def as_line_format(self) -> str:
+        # ([1], [4], 'POS')
+        # ([1,2], [4], 'POS')
+        triplets = []
+        for t in self.triples:
+            parts = []
+            for start, end in [(t.t_start, t.t_end), (t.o_start, t.o_end)]:
+                if start == end:
+                    parts.append([start])
+                else:
+                    parts.append([start, end])
+            parts.append(f"{t.label}")
+            triplets.append(tuple(parts))
+        return " ".join(self.tokens) + "#### #### ####" + str(triplets) + "\n"
+
 
 class Data(BaseModel):
     root: Path
     data_split: SplitEnum
     sentences: Optional[List[Sentence]]
+    full_path: str = ""
     num_instances: int = -1
     opinion_offset: int = 3  # Refer: jet_o.py
     is_labeled: bool = False
@@ -207,6 +225,8 @@ class Data(BaseModel):
     def load(self):
         if self.sentences is None:
             path = self.root / f"{self.data_split}.txt"
+            if self.full_path:
+                path = self.full_path
             instances = TagReader.read_inst(
                 file=path,
                 is_labeled=self.is_labeled,
@@ -214,6 +234,25 @@ class Data(BaseModel):
                 opinion_offset=self.opinion_offset,
             )
             self.sentences = [Sentence.from_instance(x) for x in instances]
+
+    @classmethod
+    def load_from_full_path(cls, path: str):
+        data = cls(full_path=path, root=Path(path).parent, data_split=SplitEnum.train)
+        data.load()
+        return data
+
+    def save_to_path(self, path: str):
+        assert self.sentences is not None
+        Path(path).parent.mkdir(exist_ok=True, parents=True)
+        with open(path, "w") as f:
+            for s in self.sentences:
+                f.write(s.as_line_format())
+
+        data = Data.load_from_full_path(path)
+        assert data.sentences is not None
+        for i, s in enumerate(data.sentences):
+            assert s.tokens == self.sentences[i].tokens
+            assert s.triples == self.sentences[i].triples
 
     def analyze_spans(self):
         print("\nHow often is target closer to opinion than any invalid target?")
@@ -393,6 +432,17 @@ class Data(BaseModel):
         print("#" * 80)
 
 
+def test_save_to_path(path: str = "aste/data/triplet_data/14lap/train.txt"):
+    path_temp = "temp.txt"
+    data = Data.load_from_full_path(path)
+    data.save_to_path(path_temp)
+    print("\nSamples")
+    with open(path_temp) as f:
+        for line in f.readlines()[:5]:
+            print(line)
+    os.remove(path_temp)
+
+
 def merge_data(items: List[Data]) -> Data:
     merged = Data(root=Path(), data_split=items[0].data_split, sentences=[])
     for data in items:
@@ -549,6 +599,4 @@ def test_merge(root="aste/data/triplet_data"):
 
 
 if __name__ == "__main__":
-    # test_aste()
-    test_merge()
-    # test_parser()
+    Fire()
