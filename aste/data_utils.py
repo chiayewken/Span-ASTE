@@ -54,6 +54,10 @@ class SentimentTriple(BaseModel):
     t_end: int
     label: LabelEnum
 
+    @classmethod
+    def make_dummy(cls):
+        return cls(o_start=0, o_end=0, t_start=0, t_end=0, label=LabelEnum.neutral)
+
     @property
     def opinion(self) -> Tuple[int, int]:
         return self.o_start, self.o_end

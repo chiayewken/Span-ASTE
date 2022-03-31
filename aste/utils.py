@@ -142,5 +142,34 @@ def clean_up_many(pattern: str = "data/triplet_data/*/*.txt"):
         clean_up_triplet_data(str(path))
 
 
+def merge_data(
+    folders_in: List[str] = [
+        "aste/data/triplet_data/14res/",
+        "aste/data/triplet_data/15res/",
+        "aste/data/triplet_data/16res/",
+    ],
+    folder_out: str = "aste/data/triplet_data/res_all/",
+):
+    for name in ["train.txt", "dev.txt", "test.txt"]:
+        outputs = []
+        for folder in folders_in:
+            path = Path(folder) / name
+            with open(path) as f:
+                for line in f:
+                    assert line.endswith("\n")
+                    outputs.append(line)
+
+        path_out = Path(folder_out) / name
+        path_out.parent.mkdir(exist_ok=True, parents=True)
+        with open(path_out, "w") as f:
+            f.write("".join(outputs))
+
+
+def safe_divide(a: float, b: float) -> float:
+    if a == 0 or b == 0:
+        return 0
+    return a / b
+
+
 if __name__ == "__main__":
     Fire()
