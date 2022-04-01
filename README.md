@@ -1,26 +1,62 @@
 ## Span-ASTE
 
+**\*\*\*\*\* New March 31th, 2022: Scikit-Style API for Easy Usage \*\*\*\*\***
+
 This repository implements our ACL 2021 research paper [Learning Span-Level Interactions for Aspect Sentiment Triplet Extraction](https://aclanthology.org/2021.acl-long.367/).
 
-### Usage
+Code Demonstration: [![Demo In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1F9zW_nVkwfwIVXTOA_juFDrlPz5TLjpK?usp=sharing)
 
-[![Demo In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1F9zW_nVkwfwIVXTOA_juFDrlPz5TLjpK?usp=sharing)
+### Installation
 
 - Install data and requirements: `bash setup.sh`
-- Run training and evaluation on GPU 0: `bash aste/main.sh 0`
-- Training config (10 epochs): [training_config/aste.jsonnet](training_config/aste.jsonnet)
-- Modified data reader: [span_model/data/dataset_readers/span_model.py](span_model/data/dataset_readers/span_model.py)
+- Training config: [training_config/config.jsonnet](training_config/config.jsonnet)
 - Modeling code: [span_model/models/span_model.py](span_model/models/span_model.py)
 
-### New Data
-To apply the span-based model to a new dataset, you need to create a folder in `aste/data/triplet_data` and include `train.txt`, `dev.txt` and `test.txt`. 
-The data format for each line contains the sentence and a list of triplets:
+### Data Format
 
-> sentence#### #### ####[(triplet_0, ..., triplet_n]
+Our span-based model uses data files where the format for each line contains one input sentence and a list of output triplets:
 
-Each triplet is a tuple that consists of `(span_a, span_b, label)`. For example:
+> sentence#### #### ####[triplet_0, ..., triplet_n]
 
-> The screen is very large and crystal clear with amazing colors and resolution .#### #### ####[([1], [4], 'POS'), ([1], [7], 'POS'), ([10], [9], 'POS'), ([12], [9], 'POS')]
+Each triplet is a tuple that consists of `(span_a, span_b, label)`. Each span is a list. If the span covers a single word, the list will contain only the word index. If the span covers multiple words, the list will contain the index of the first word and last word. For example:
+
+> It also has lots of other Korean dishes that are affordable and just as yummy .#### #### ####[([6, 7], [10], 'POS'), ([6, 7], [14], 'POS')]
+
+For prediction, the data can contain the input sentence only, with an empty list for triplets:
+
+> sentence#### #### ####[]
+
+### Predict Using Model Weights
+
+- First, download and extract [pre-trained weights](https://github.com/chiayewken/Span-ASTE/releases/download/v1.0.0/pretrained_14lap.tar) to `pretrained_dir`
+- The input data file `path_in` and output data file `path_out` have the same [data format](#data-format).
+
+```
+from wrapper import SpanModel
+
+model = SpanModel(save_dir=pretrained_dir, random_seed=0)
+model.predict(path_in, path_out)
+```
+
+### Model Training
+
+- Configure the model with save directory and random seed.
+- Start training based on the training and validation data which have the same [data format](#data-format).
+
+```
+model = SpanModel(save_dir=save_dir, random_seed=random_seed)
+model.fit(path_train, path_dev)
+```
+
+### Model Evaluation
+
+- From the trained model, predict triplets from the test sentences and output into `path_pred`.
+- The model includes a scoring function which will provide F1 metric scores for triplet extraction.
+
+```
+model.predict(path_in=path_test, path_out=path_pred)
+results = model.score(path_pred, path_test)
+```
 
 ### Research Citation
 If the code is useful for your research project, we appreciate if you cite the following paper:
