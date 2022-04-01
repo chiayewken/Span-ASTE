@@ -1,10 +1,14 @@
-## Span-ASTE
+## Span-ASTE: Learning Span-Level Interactions for Aspect Sentiment Triplet Extraction
 
 **\*\*\*\*\* New March 31th, 2022: Scikit-Style API for Easy Usage \*\*\*\*\***
 
-This repository implements our ACL 2021 research paper [Learning Span-Level Interactions for Aspect Sentiment Triplet Extraction](https://aclanthology.org/2021.acl-long.367/).
-
 Code Demonstration: [![Demo In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1F9zW_nVkwfwIVXTOA_juFDrlPz5TLjpK?usp=sharing)
+
+This repository implements our ACL 2021 research paper [Learning Span-Level Interactions for Aspect Sentiment Triplet Extraction](https://aclanthology.org/2021.acl-long.367/). 
+Our goal is to extract sentiment triplets of the format `(aspect target, opinion expression and sentiment polarity)`, as shown in the diagram below. 
+The ASTE task benchmark is available on [PapersWithCode](https://paperswithcode.com/sota/aspect-sentiment-triplet-extraction-on-aste).
+
+<img src="https://github.com/chiayewken/Span-ASTE/blob/13a851b166998210a7cd2def5fa4aff20819b54d/assets/task_image.png" width="450" height="150">
 
 ### Installation
 
