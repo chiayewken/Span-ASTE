@@ -12,6 +12,7 @@ The ASTE task benchmark is available on [PapersWithCode](https://paperswithcode.
 
 ### Installation
 
+- Tested on Python 3.7 (recommended to use a virtual environment such as [Conda](https://docs.conda.io/en/latest/miniconda.html))
 - Install data and requirements: `bash setup.sh`
 - Training config: [training_config/config.jsonnet](training_config/config.jsonnet)
 - Modeling code: [span_model/models/span_model.py](span_model/models/span_model.py)
