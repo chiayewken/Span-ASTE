@@ -20,7 +20,8 @@ Our goal is to extract sentiment triplets of the format `(aspect target, opinion
 
 ### Data Format
 
-Our span-based model uses data files where the format for each line contains one input sentence and a list of output triplets:
+Our span-based model uses data files where the format for each line contains one input sentence and a list of output triplets.
+The following data format is demonstrated in the [sample data file](sample_data.txt):
 
 > sentence#### #### ####[triplet_0, ..., triplet_n]
 
