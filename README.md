@@ -35,7 +35,7 @@ For prediction, the data can contain the input sentence only, with an empty list
 
 ### Predict Using Model Weights
 
-- First, download and extract [pre-trained weights](https://github.com/chiayewken/Span-ASTE/releases/download/v1.0.0/pretrained_14lap.tar) to `pretrained_dir`
+- First, download and extract [pre-trained weights](https://github.com/chiayewken/Span-ASTE/releases) to `pretrained_dir`
 - The input data file `path_in` and output data file `path_out` have the same [data format](#data-format).
 
 ```
