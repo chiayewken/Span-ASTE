@@ -1,5 +1,7 @@
 ## Span-ASTE: Learning Span-Level Interactions for Aspect Sentiment Triplet Extraction
 
+**\*\*\*\*\* New August 30th, 2022: Featured on YouTube video by Xiaoqing Wan [![YT](https://img.shields.io/youtube/views/rRTvsuGRnJ0?style=social)](https://www.youtube.com/watch?v=rRTvsuGRnJ0) \*\*\*\*\***
+
 **\*\*\*\*\* New March 31th, 2022: Scikit-Style API for Easy Usage \*\*\*\*\***
 
 [![PWC](https://img.shields.io/badge/PapersWithCode-Benchmark-%232cafb1)](https://paperswithcode.com/sota/aspect-sentiment-triplet-extraction-on-aste)
@@ -35,7 +37,7 @@ For prediction, the data can contain the input sentence only, with an empty list
 
 ### Predict Using Model Weights
 
-- First, download and extract [pre-trained weights](https://github.com/chiayewken/Span-ASTE/releases/download/v1.0.0/pretrained_14lap.tar) to `pretrained_dir`
+- First, download and extract [pre-trained weights](https://github.com/chiayewken/Span-ASTE/releases) to `pretrained_dir`
 - The input data file `path_in` and output data file `path_out` have the same [data format](#data-format).
 
 ```
