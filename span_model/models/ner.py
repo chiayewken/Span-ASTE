@@ -8,9 +8,9 @@ from overrides import overrides
 from allennlp.data import Vocabulary
 from allennlp.models.model import Model
 from allennlp.modules import TimeDistributed
-from allennlp.nn import util, InitializerApplicator, RegularizerApplicator
+from allennlp.nn import util, RegularizerApplicator
 
-from span_model.models.shared import FocalLoss, BiAffineSingleInput
+from span_model.models.shared import BiAffineSingleInput
 from span_model.training.ner_metrics import NERMetrics
 from span_model.data.dataset_readers import document
 
@@ -40,21 +40,10 @@ class NERTagger(Model):
         make_feedforward: Callable,
         span_emb_dim: int,
         regularizer: Optional[RegularizerApplicator] = None,
-        use_bi_affine: bool = False,
-        neg_class_weight: float = -1,
-        use_focal_loss: bool = False,
-        focal_loss_gamma: int = 2,
-        use_double_scorer: bool = False,
-        use_gold_for_train_prune_scores: bool = False,
-        use_single_pool: bool = False,
-        name: str = "ner_labels"
+        name: str = "ner_labels",
     ) -> None:
         super(NERTagger, self).__init__(vocab, regularizer)
 
-        self.use_single_pool = use_single_pool
-        self.use_gold_for_train_prune_scores = use_gold_for_train_prune_scores
-        self.use_double_scorer = use_double_scorer
-        self.use_bi_affine = use_bi_affine
         self._name = name
         self._namespaces = [
             entry for entry in vocab.get_namespaces() if self._name in entry
@@ -62,9 +51,6 @@ class NERTagger(Model):
 
         # Number of classes determine the output dimension of the final layer
         self._n_labels = {name: vocab.get_vocab_size(name) for name in self._namespaces}
-        if self.use_single_pool:
-            for n in self._namespaces:
-                self._n_labels[n] -= 1
 
         # Null label is needed to keep track of when calculating the metrics
         for namespace in self._namespaces:
@@ -82,12 +68,8 @@ class NERTagger(Model):
 
         for namespace in self._namespaces:
             self._ner_scorers[namespace] = self.make_scorer(
-                make_feedforward, span_emb_dim, self._n_labels[namespace])
-
-            if self.use_double_scorer:
-                self._ner_scorers[namespace] = None  # noqa
-                self._ner_scorers["opinion"] = self.make_scorer(make_feedforward, span_emb_dim, 2)
-                self._ner_scorers["target"] = self.make_scorer(make_feedforward, span_emb_dim, 2)
+                make_feedforward, span_emb_dim, self._n_labels[namespace]
+            )
 
             self._ner_metrics[namespace] = NERMetrics(
                 self._n_labels[namespace], null_label
@@ -95,24 +77,9 @@ class NERTagger(Model):
 
             self.i_opinion = vocab.get_token_index("OPINION", namespace)
             self.i_target = vocab.get_token_index("TARGET", namespace)
-            if self.use_single_pool:
-                self.i_opinion = self.i_target = 1
 
         self._active_namespace = None
-
         self._loss = torch.nn.CrossEntropyLoss(reduction="sum")
-        if neg_class_weight != -1:
-            assert len(self._namespaces) == 1
-            num_pos_classes = self._n_labels[self._namespaces[0]] - 1
-            pos_weight = (1 - neg_class_weight) / num_pos_classes
-            weight = [neg_class_weight] + [pos_weight] * num_pos_classes
-            print(dict(ner_class_weight=weight))
-            self._loss = torch.nn.CrossEntropyLoss(reduction="sum", weight=torch.tensor(weight))
-
-        if use_focal_loss:
-            assert neg_class_weight != -1
-            self._loss = FocalLoss(
-                reduction="sum", weight=torch.tensor(weight), gamma=focal_loss_gamma)
         print(dict(ner_loss_fn=self._loss))
 
     def make_scorer(self, make_feedforward, span_emb_dim, n_labels):
@@ -120,18 +87,9 @@ class NERTagger(Model):
         scorer = torch.nn.Sequential(
             TimeDistributed(mention_feedforward),
             TimeDistributed(
-                torch.nn.Linear(
-                    mention_feedforward.get_output_dim(),
-                    n_labels
-                )
+                torch.nn.Linear(mention_feedforward.get_output_dim(), n_labels)
             ),
         )
-        if self.use_bi_affine:
-            scorer = BiAffineSingleInput(
-                input_size=span_emb_dim // 2,
-                project_size=200,
-                output_size=n_labels,
-            )
         return scorer
 
     @overrides
@@ -152,20 +110,13 @@ class NERTagger(Model):
         # span_embeddings
 
         self._active_namespace = f"{metadata.dataset}__{self._name}"
-        if self.use_double_scorer:
-            opinion_scores = self._ner_scorers["opinion"](span_embeddings)
-            target_scores = self._ner_scorers["target"](span_embeddings)
-            null_scores = torch.stack([opinion_scores[..., 0], target_scores[..., 0]], dim=-1).mean(dim=-1, keepdim=True)
-            pool = [null_scores, None, None]
-            pool[self.i_opinion] = opinion_scores[..., [1]]
-            pool[self.i_target] = target_scores[..., [1]]
-            ner_scores = torch.cat(pool, dim=-1)
-        else:
-            scorer = self._ner_scorers[self._active_namespace]
-            ner_scores = scorer(span_embeddings)
+        scorer = self._ner_scorers[self._active_namespace]
+        ner_scores = scorer(span_embeddings)
 
         # Give large positive scores to "null" class in masked-out elements
-        ner_scores[..., 0] = util.replace_masked_values(ner_scores[..., 0], span_mask.bool(), 1e20)
+        ner_scores[..., 0] = util.replace_masked_values(
+            ner_scores[..., 0], span_mask.bool(), 1e20
+        )
         _, predicted_ner = ner_scores.max(2)
 
         predictions = self.predict(
@@ -177,19 +128,14 @@ class NERTagger(Model):
         output_dict = {"predictions": predictions}
         # New
         output_dict.update(ner_scores=ner_scores)
-        output_dict.update(opinion_scores=ner_scores.softmax(dim=-1)[..., [self.i_opinion]])
-        output_dict.update(target_scores=ner_scores.softmax(dim=-1)[..., [self.i_target]])
+        output_dict.update(
+            opinion_scores=ner_scores.softmax(dim=-1)[..., [self.i_opinion]]
+        )
+        output_dict.update(
+            target_scores=ner_scores.softmax(dim=-1)[..., [self.i_target]]
+        )
 
         if ner_labels is not None:
-            if self.use_single_pool:
-                ner_labels = torch.ne(ner_labels, 0.0).long()
-
-            if self.use_gold_for_train_prune_scores:
-                for name, i in dict(opinion_scores=self.i_opinion, target_scores=self.i_target).items():
-                    mask = ner_labels.eq(i).unsqueeze(dim=-1)
-                    assert mask.shape == output_dict[name].shape
-                    output_dict[name] = output_dict[name].masked_fill(mask, 1e20)
-
             metrics = self._ner_metrics[self._active_namespace]
             metrics(predicted_ner, ner_labels, span_mask)
             ner_scores_flat = ner_scores.view(
@@ -260,7 +206,9 @@ class NERTagger(Model):
         res_avg = {}
         for name in ["precision", "recall", "f1"]:
             values = [res[key] for key in res if name in key]
-            res_avg[f"MEAN__{self._name.replace('_labels', '')}_{name}"] = sum(values) / len(values) if values else 0
+            res_avg[f"MEAN__{self._name.replace('_labels', '')}_{name}"] = (
+                sum(values) / len(values) if values else 0
+            )
             res.update(res_avg)
 
         return res

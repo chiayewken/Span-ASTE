@@ -64,37 +64,11 @@
     },
     "modules": {
       "ner": {
-        "focal_loss_gamma": 2,
-        "neg_class_weight": -1,
-        "use_bi_affine": false,
-        "use_double_scorer": false,
-        "use_focal_loss": false,
-        "use_gold_for_train_prune_scores": false,
-        "use_single_pool": false
       },
       "relation": {
-        "focal_loss_gamma": 2,
-        "neg_class_weight": -1,
-        "span_length_loss_weight_gamma": 0,
         "spans_per_word": 0.5,
-        "use_bag_pair_scorer": false,
-        "use_bi_affine_classifier": false,
-        "use_bi_affine_pruner": false,
-        "use_bi_affine_v2": false,
-        "use_classify_mask_pruner": false,
         "use_distance_embeds": true,
-        "use_focal_loss": false,
-        "use_ner_scores_for_prune": false,
-        "use_ope_down_project": false,
-        "use_pair_feature_cls": false,
-        "use_pair_feature_maxpool": false,
-        "use_pair_feature_multiply": false,
-        "use_pairwise_down_project": false,
         "use_pruning": true,
-        "use_single_pool": false,
-        "use_span_loss_for_pruners": false,
-        "use_span_pair_aux_task": false,
-        "use_span_pair_aux_task_after_prune": false
       }
     },
     "span_extractor_type": "endpoint",

@@ -10,9 +10,8 @@ from allennlp.models.model import Model
 from allennlp.nn import util, RegularizerApplicator
 from allennlp.modules import TimeDistributed
 
-from span_model.models.shared import BiAffine, SpanLengthCrossEntropy, BagPairScorer, BiAffineV2
 from span_model.training.relation_metrics import RelationMetrics
-from span_model.models.entity_beam_pruner import Pruner, TwoScorePruner
+from span_model.models.entity_beam_pruner import Pruner
 from span_model.data.dataset_readers import document
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
@@ -48,7 +47,9 @@ class DistanceEmbedder(torch.nn.Module):
         self.dim = dim
         self.embedder = torch.nn.Embedding(self.vocab_size, self.dim)
 
-    def to_distance_buckets(self, spans_a: torch.Tensor, spans_b: torch.Tensor) -> torch.Tensor:
+    def to_distance_buckets(
+        self, spans_a: torch.Tensor, spans_b: torch.Tensor
+    ) -> torch.Tensor:
         bs, num_a, dim = spans_a.shape
         bs, num_b, dim = spans_b.shape
         assert dim == 2
@@ -102,30 +103,15 @@ class ProperRelationExtractor(Model):
         positive_label_weight: float = 1.0,
         regularizer: Optional[RegularizerApplicator] = None,
         use_distance_embeds: bool = False,
-        use_pair_feature_maxpool: bool = False,
-        use_pair_feature_cls: bool = False,
-        use_bi_affine_classifier: bool = False,
-        neg_class_weight: float = -1,
-        span_length_loss_weight_gamma: float = 0.0,
-        use_bag_pair_scorer: bool = False,
-        use_bi_affine_v2: bool = False,
         use_pruning: bool = True,
-        use_single_pool: bool = False,
         **kwargs,  # noqa
     ) -> None:
         super().__init__(vocab, regularizer)
 
         print(dict(unused_keys=kwargs.keys()))
         print(dict(locals=locals()))
-        self.use_single_pool = use_single_pool
         self.use_pruning = use_pruning
-        self.use_bi_affine_v2 = use_bi_affine_v2
-        self.use_bag_pair_scorer = use_bag_pair_scorer
-        self.span_length_loss_weight_gamma = span_length_loss_weight_gamma
-        self.use_bi_affine_classifier = use_bi_affine_classifier
         self.use_distance_embeds = use_distance_embeds
-        self.use_pair_feature_maxpool = use_pair_feature_maxpool
-        self.use_pair_feature_cls = use_pair_feature_cls
         self._text_embeds: Optional[torch.Tensor] = None
         self._text_mask: Optional[torch.Tensor] = None
         self._spans_a: Optional[torch.Tensor] = None
@@ -136,11 +122,13 @@ class ProperRelationExtractor(Model):
         if self.use_distance_embeds:
             self.d_embedder = DistanceEmbedder()
             relation_scorer_dim += self.d_embedder.dim
-        if self.use_pair_feature_maxpool:
-            relation_scorer_dim += token_emb_dim
-        if self.use_pair_feature_cls:
-            relation_scorer_dim += token_emb_dim
-        print(dict(token_emb_dim=token_emb_dim, span_emb_dim=span_emb_dim, relation_scorer_dim=relation_scorer_dim))
+        print(
+            dict(
+                token_emb_dim=token_emb_dim,
+                span_emb_dim=span_emb_dim,
+                relation_scorer_dim=relation_scorer_dim,
+            )
+        )
 
         self._namespaces = [
             entry for entry in vocab.get_namespaces() if "relation_labels" in entry
@@ -148,10 +136,6 @@ class ProperRelationExtractor(Model):
         self._n_labels = {name: vocab.get_vocab_size(name) for name in self._namespaces}
         assert len(self._n_labels) == 1
         n_labels = list(self._n_labels.values())[0] + 1
-        if self.use_bi_affine_classifier:
-            self._bi_affine_classifier = BiAffine(span_emb_dim, project_size=200, output_size=n_labels)
-        if self.use_bi_affine_v2:
-            self._bi_affine_v2 = BiAffineV2(span_emb_dim, project_size=200, output_size=n_labels)
 
         self._mention_pruners = torch.nn.ModuleDict()
         self._relation_feedforwards = torch.nn.ModuleDict()
@@ -162,14 +146,9 @@ class ProperRelationExtractor(Model):
         self._pruner_t = self._make_pruner(span_emb_dim, make_feedforward)
         if not self.use_pruning:
             self._pruner_o, self._pruner_t = None, None
-        if self.use_single_pool:
-            assert self.use_pruning
-            self._pruner_o = self._pruner_t
 
         for namespace in self._namespaces:
             relation_feedforward = make_feedforward(input_dim=relation_scorer_dim)
-            if self.use_bag_pair_scorer:
-                relation_feedforward = BagPairScorer(make_feedforward, span_emb_dim)
             self._relation_feedforwards[namespace] = relation_feedforward
             relation_scorer = torch.nn.Linear(
                 relation_feedforward.get_output_dim(), self._n_labels[namespace] + 1
@@ -180,29 +159,15 @@ class ProperRelationExtractor(Model):
 
         self._spans_per_word = spans_per_word
         self._active_namespace = None
-
         self._loss = torch.nn.CrossEntropyLoss(reduction="sum", ignore_index=-1)
-        if self.span_length_loss_weight_gamma != 0:
-            assert neg_class_weight == -1
-            self._loss = SpanLengthCrossEntropy(
-                gamma=self.span_length_loss_weight_gamma, reduction="sum", ignore_index=-1)
-
-        if neg_class_weight != -1:
-            assert len(self._namespaces) == 1
-            num_pos_classes = self._n_labels[self._namespaces[0]]
-            weight = torch.tensor([neg_class_weight] + [1.0] * num_pos_classes)
-            print(dict(relation_neg_class_weight=weight))
-            self._loss = torch.nn.CrossEntropyLoss(reduction="sum", ignore_index=-1, weight=weight)
         print(dict(relation_loss_fn=self._loss))
 
-    def _make_pruner(self, span_emb_dim:int, make_feedforward:Callable):
+    def _make_pruner(self, span_emb_dim: int, make_feedforward: Callable):
         mention_feedforward = make_feedforward(input_dim=span_emb_dim)
 
         feedforward_scorer = torch.nn.Sequential(
             TimeDistributed(mention_feedforward),
-            TimeDistributed(
-                torch.nn.Linear(mention_feedforward.get_output_dim(), 1)
-            ),
+            TimeDistributed(torch.nn.Linear(mention_feedforward.get_output_dim(), 1)),
         )
         return Pruner(feedforward_scorer, use_external_score=True)
 
@@ -218,8 +183,12 @@ class ProperRelationExtractor(Model):
     ) -> Dict[str, torch.Tensor]:
         self._active_namespace = f"{metadata.dataset}__relation_labels"
 
-        pruned_o: PruneOutput = self._prune_spans(spans, span_mask, span_embeddings, sentence_lengths, "opinion")
-        pruned_t: PruneOutput = self._prune_spans(spans, span_mask, span_embeddings, sentence_lengths, "target")
+        pruned_o: PruneOutput = self._prune_spans(
+            spans, span_mask, span_embeddings, sentence_lengths, "opinion"
+        )
+        pruned_t: PruneOutput = self._prune_spans(
+            spans, span_mask, span_embeddings, sentence_lengths, "target"
+        )
         relation_scores = self._compute_relation_scores(pruned_o, pruned_t)
 
         prediction_dict, predictions = self.predict(
@@ -240,7 +209,10 @@ class ProperRelationExtractor(Model):
                 relation_labels, pruned_o, pruned_t
             )
 
-            self._relation_scores, self._gold_relations = relation_scores, gold_relations
+            self._relation_scores, self._gold_relations = (
+                relation_scores,
+                gold_relations,
+            )
             cross_entropy = self._get_cross_entropy_loss(
                 relation_scores, gold_relations
             )
@@ -255,7 +227,9 @@ class ProperRelationExtractor(Model):
             output_dict["loss"] = cross_entropy
         return output_dict
 
-    def _prune_spans(self, spans, span_mask, span_embeddings, sentence_lengths, name: str) -> PruneOutput:
+    def _prune_spans(
+        self, spans, span_mask, span_embeddings, sentence_lengths, name: str
+    ) -> PruneOutput:
         if not self.use_pruning:
             bs, num_spans, dim = span_embeddings.shape
             device = span_embeddings.device
@@ -263,16 +237,19 @@ class ProperRelationExtractor(Model):
                 spans=spans,
                 span_mask=span_mask.unsqueeze(dim=-1),
                 span_embeddings=span_embeddings,
-                num_spans_to_keep=torch.full((bs,), fill_value=num_spans, device=device, dtype=torch.long),
-                span_indices=torch.arange(num_spans, device=device, dtype=torch.long).view(1, num_spans).expand(bs, -1),
+                num_spans_to_keep=torch.full(
+                    (bs,), fill_value=num_spans, device=device, dtype=torch.long
+                ),
+                span_indices=torch.arange(num_spans, device=device, dtype=torch.long)
+                .view(1, num_spans)
+                .expand(bs, -1),
                 span_mention_scores=torch.zeros(bs, num_spans, 1, device=device),
             )
 
         pruner = dict(opinion=self._pruner_o, target=self._pruner_t)[name]
-        if self.use_single_pool:
-            self._opinion_scores = torch.maximum(self._opinion_scores, self._target_scores)
-            self._target_scores = self._opinion_scores
-        mention_scores = dict(opinion=self._opinion_scores, target=self._target_scores)[name]
+        mention_scores = dict(opinion=self._opinion_scores, target=self._target_scores)[
+            name
+        ]
         pruner.set_external_score(mention_scores.detach())
 
         # Prune
@@ -310,14 +287,20 @@ class ProperRelationExtractor(Model):
             spans=top_spans,
         )
 
-    def predict(self, spans_a, spans_b, relation_scores, num_keep_a, num_keep_b, metadata):
+    def predict(
+        self, spans_a, spans_b, relation_scores, num_keep_a, num_keep_b, metadata
+    ):
         preds_dict = []
         predictions = []
         for i in range(relation_scores.shape[0]):
             # Each entry/sentence in batch
             pred_dict_sent, predictions_sent = self._predict_sentence(
-                spans_a[i], spans_b[i], relation_scores[i],
-                num_keep_a[i], num_keep_b[i], metadata[i]
+                spans_a[i],
+                spans_b[i],
+                relation_scores[i],
+                num_keep_a[i],
+                num_keep_b[i],
+                metadata[i],
             )
             preds_dict.append(pred_dict_sent)
             predictions.append(predictions_sent)
@@ -325,7 +308,13 @@ class ProperRelationExtractor(Model):
         return preds_dict, predictions
 
     def _predict_sentence(
-        self, top_spans_a, top_spans_b, relation_scores, num_keep_a, num_keep_b, sentence
+        self,
+        top_spans_a,
+        top_spans_b,
+        relation_scores,
+        num_keep_a,
+        num_keep_b,
+        sentence,
     ):
         num_a = num_keep_a.item()  # noqa
         num_b = num_keep_b.item()  # noqa
@@ -338,7 +327,7 @@ class ProperRelationExtractor(Model):
         predicted_scores_softmax, _ = softmax_scores.max(dim=-1)
         predicted_labels -= 1  # Subtract 1 so that null labels get -1.
 
-        ix = (predicted_labels >= 0)  # TODO: Figure out their keep_mask (relation.py:202)
+        ix = predicted_labels >= 0  # TODO: Figure out their keep_mask (relation.py:202)
 
         res_dict = {}
         predictions = []
@@ -396,45 +385,20 @@ class ProperRelationExtractor(Model):
 
     def _make_pair_features(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
         assert a.shape == b.shape
-        bs, num_a, num_b, size = a.shape
         features = [a, b]
-
-        if self.use_pair_feature_maxpool:
-            x = self._text_embeds
-            c = global_max_pool1d(x)  # [bs, size]
-            bs, size = c.shape
-            c = c.view(bs, 1, 1, size).expand(-1, num_a, num_b, -1)
-            features.append(c)
-
-        if self.use_pair_feature_cls:
-            c = self._text_embeds[:, 0, :]
-            bs, size = c.shape
-            c = c.view(bs, 1, 1, size).expand(-1, num_a, num_b, -1)
-            features.append(c)
-
         if self.use_distance_embeds:
             features.append(self.d_embedder(self._spans_a, self._spans_b))
 
         x = torch.cat(features, dim=-1)
         return x
 
-    def _compute_span_pair_embeddings(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
+    def _compute_span_pair_embeddings(
+        self, a: torch.Tensor, b: torch.Tensor
+    ) -> torch.Tensor:
         c = self._make_pair_features(a, b)
-        if self.use_bi_affine_classifier:
-            c = self._bi_affine_classifier(a, b)
         return c
 
     def _compute_relation_scores(self, pruned_a: PruneOutput, pruned_b: PruneOutput):
-        if self.span_length_loss_weight_gamma != 0:
-            bs, num_a, _ = pruned_a.spans.shape
-            bs, num_b, _ = pruned_b.spans.shape
-            widths_a = pruned_a.spans[..., [1]] - pruned_a.spans[..., [0]] + 1
-            widths_b = pruned_b.spans[..., [1]] - pruned_b.spans[... ,[0]] + 1
-            widths_a = widths_a.view(bs, num_a, 1, 1)
-            widths_b = widths_b.view(bs, 1, num_b, 1)
-            widths = (widths_a + widths_b) / 2
-            self._loss.lengths = widths.view(bs * num_a * num_b)
-
         a_orig, b_orig = pruned_a.span_embeddings, pruned_b.span_embeddings
         bs, num_a, size = a_orig.shape
         bs, num_b, size = b_orig.shape
@@ -443,35 +407,32 @@ class ProperRelationExtractor(Model):
         pool = []
 
         for i in range(0, num_a, chunk_size):
-            a = a_orig[:, i:i + chunk_size, :]
+            a = a_orig[:, i : i + chunk_size, :]
             num_chunk = a.shape[1]
             a = a.view(bs, num_chunk, 1, size).expand(-1, -1, num_b, -1)
             b = b_orig.view(bs, 1, num_b, size).expand(-1, num_chunk, -1, -1)
             assert a.shape == b.shape
-            self._spans_a = pruned_a.spans[:, i:i + chunk_size, :]
+            self._spans_a = pruned_a.spans[:, i : i + chunk_size, :]
             self._spans_b = pruned_b.spans
 
             embeds = self._compute_span_pair_embeddings(a, b)
             self._relation_embeds = embeds
 
-            if self.use_bi_affine_classifier:
-                scores = embeds
-            else:
-                relation_feedforward = self._relation_feedforwards[self._active_namespace]
-                relation_scorer = self._relation_scorers[self._active_namespace]
-                embeds = torch.flatten(embeds, end_dim=-2)
-                projected = relation_feedforward(embeds)
-                scores = relation_scorer(projected)
+            relation_feedforward = self._relation_feedforwards[self._active_namespace]
+            relation_scorer = self._relation_scorers[self._active_namespace]
+            embeds = torch.flatten(embeds, end_dim=-2)
+            projected = relation_feedforward(embeds)
+            scores = relation_scorer(projected)
 
             scores = scores.view(bs, num_chunk, num_b, -1)
-            if self.use_bi_affine_v2:
-                scores += self._bi_affine_v2(a, b)
             pool.append(scores)
         scores = torch.cat(pool, dim=1)
         return scores
 
     @staticmethod
-    def _get_pruned_gold_relations(relation_labels: torch.Tensor, pruned_a: PruneOutput, pruned_b: PruneOutput) -> torch.Tensor:
+    def _get_pruned_gold_relations(
+        relation_labels: torch.Tensor, pruned_a: PruneOutput, pruned_b: PruneOutput
+    ) -> torch.Tensor:
         """
         Loop over each slice and get the labels for the spans from that slice.
         All labels are offset by 1 so that the "null" label gets class zero. This is the desired
