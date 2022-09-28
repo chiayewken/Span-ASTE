@@ -97,13 +97,9 @@
         "use_span_pair_aux_task_after_prune": false
       }
     },
-    "relation_head_type": "proper",
     "span_extractor_type": "endpoint",
     "target_task": "relation",
     "type": "span_model",
-    "use_bilstm_after_embedder": false,
-    "use_double_mix_embedder": false,
-    "use_ner_embeds": false,
     "use_span_width_embeds": true
   },
   "trainer": {

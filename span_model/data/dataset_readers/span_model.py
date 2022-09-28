@@ -2,14 +2,19 @@ import json
 import logging
 import pickle as pkl
 import warnings
-from typing import Any, DefaultDict, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict
 
 from allennlp.common.file_utils import cached_path
 from allennlp.data.dataset_readers.dataset_reader import DatasetReader
 from allennlp.data.dataset_readers.dataset_utils import enumerate_spans
-from allennlp.data.fields import (AdjacencyField, LabelField, ListField,
-                                  MetadataField, SequenceLabelField, SpanField,
-                                  TextField)
+from allennlp.data.fields import (
+    AdjacencyField,
+    LabelField,
+    ListField,
+    MetadataField,
+    SpanField,
+    TextField,
+)
 from allennlp.data.instance import Instance
 from allennlp.data.token_indexers import SingleIdTokenIndexer, TokenIndexer
 from allennlp.data.tokenizers import Token
@@ -18,24 +23,6 @@ from overrides import overrides
 from span_model.data.dataset_readers.document import Document, Sentence
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
-
-# New
-import sys
-
-sys.path.append("aste")
-from data_utils import BioesTagMaker
-from pydantic import BaseModel
-
-
-class Stats(BaseModel):
-    entity_total: int = 0
-    entity_drop: int = 0
-    relation_total: int = 0
-    relation_drop: int = 0
-    graph_total: int = 0
-    graph_edges: int = 0
-    grid_total: int = 0
-    grid_paired: int = 0
 
 
 class SpanModelDataException(Exception):
@@ -57,9 +44,7 @@ class SpanModelReader(DatasetReader):
     ) -> None:
         super().__init__(**kwargs)
         # New
-        self.stats = Stats()
         self.is_train = False
-        self.tag_maker = BioesTagMaker()
 
         print("#" * 80)
 
@@ -81,10 +66,6 @@ class SpanModelReader(DatasetReader):
             instance = self.text_to_instance(doc_text)
             yield instance
 
-        # New
-        print(dict(file_path=file_path, stats=self.stats))
-        self.stats = Stats()
-
     def _too_long(self, span):
         return span[1] - span[0] + 1 > self._max_span_width
 
@@ -95,20 +76,12 @@ class SpanModelReader(DatasetReader):
             if self._too_long(span):
                 continue
             # New
-            self.stats.entity_total += 1
             if span not in span_tuples:
-                self.stats.entity_drop += 1
                 continue
             ix = span_tuples.index(span)
             ner_labels[ix] = label
 
         return ner_labels
-
-    def _process_tags(self, sent) -> List[str]:
-        if not sent.ner_dict:
-            return []
-        spans, labels = zip(*sent.ner_dict.items())
-        return self.tag_maker.run(spans, labels, num_tokens=len(sent.text))
 
     def _process_relations(self, span_tuples, sent):
         relations = []
@@ -121,9 +94,7 @@ class SpanModelReader(DatasetReader):
             if self._too_long(span1) or self._too_long(span2):
                 continue
             # New
-            self.stats.relation_total += 1
             if (span1 not in span_tuples) or (span2 not in span_tuples):
-                self.stats.relation_drop += 1
                 continue
             ix1 = span_tuples.index(span1)
             ix2 = span_tuples.index(span2)
@@ -131,18 +102,6 @@ class SpanModelReader(DatasetReader):
             relations.append(label)
 
         return relations, relation_indices
-
-    def _process_grid(self, sent):
-        indices = []
-        for ((a_start, a_end), (b_start, b_end)), label in sent.relation_dict.items():
-            for i in [a_start, a_end]:
-                for j in [b_start, b_end]:
-                    indices.append((i, j))
-        indices = sorted(set(indices))
-        assert indices
-        self.stats.grid_paired += len(indices)
-        self.stats.grid_total += len(sent.text) ** 2
-        return indices
 
     def _process_sentence(self, sent: Sentence, dataset: str):
         # Get the sentence text and define the `text_field`.
@@ -189,11 +148,6 @@ class SpanModelReader(DatasetReader):
                     for entry in ner_labels
                 ]
             )
-            fields["tag_labels"] = SequenceLabelField(
-                self._process_tags(sent),
-                text_field,
-                label_namespace=f"{dataset}__tag_labels",
-            )
         if sent.relations is not None:
             relation_labels, relation_indices = self._process_relations(
                 span_tuples, sent
@@ -203,12 +157,6 @@ class SpanModelReader(DatasetReader):
                 sequence_field=span_field,
                 labels=relation_labels,
                 label_namespace=f"{dataset}__relation_labels",
-            )
-            fields["grid_labels"] = AdjacencyField(
-                indices=self._process_grid(sent),
-                sequence_field=text_field,
-                labels=None,
-                label_namespace=f"{dataset}__grid_labels",
             )
 
         return fields
