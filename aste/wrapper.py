@@ -3,7 +3,9 @@ import os
 from pathlib import Path
 from typing import List
 
-import _jsonnet
+import sys
+from allennlp.commands.train import train_model
+from allennlp.common import Params
 from fire import Fire
 from pydantic import BaseModel
 from tqdm import tqdm
@@ -38,34 +40,25 @@ class SpanModel(BaseModel):
         weights_dir = Path(self.save_dir) / "weights"
         weights_dir.mkdir(exist_ok=True, parents=True)
         print(dict(weights_dir=weights_dir))
-        path_config = Path(self.save_dir) / "config.jsonnet"
-        config = json.loads(_jsonnet.evaluate_file(self.path_config_base))
 
-        for key in ["random_seed", "pytorch_seed", "numpy_seed"]:
-            assert key in config.keys()
-            config[key] = self.random_seed
-            print({key: self.random_seed})
-
-        for name, path in dict(
-            train=path_train, validation=path_dev, test=path_dev
-        ).items():
-            key = f"{name}_data_path"
-            assert key in config.keys()
-            path_temp = self.save_temp_data(path, name)
-            config[key] = str(path_temp)
-            print({key: path_temp})
-
-        with open(path_config, "w") as f:
-            f.write(json.dumps(config, indent=2))
-        print(dict(path_config=path_config))
-
-        shell = Shell()
-        work_dir = Path(".").resolve()
-        shell.run(
-            f"cd {work_dir} && allennlp train {path_config}",
-            serialization_dir=str(weights_dir),
-            include_package="span_model",
+        params = Params.from_file(
+            self.path_config_base,
+            params_overrides=dict(
+                random_seed=self.random_seed,
+                numpy_seed=self.random_seed,
+                pytorch_seed=self.random_seed,
+                train_data_path=str(self.save_temp_data(path_train, "train")),
+                validation_data_path=str(self.save_temp_data(path_dev, "dev")),
+                test_data_path=str(self.save_temp_data(path_dev, "dev")),
+            ),
         )
+
+        # Register custom modules
+        sys.path.append(".")
+        from span_model.data.dataset_readers.span_model import SpanModelReader
+
+        assert SpanModelReader is not None
+        train_model(params, serialization_dir=str(weights_dir))
 
     def predict(self, path_in: str, path_out: str):
         work_dir = Path(".").resolve()

@@ -1,11 +1,77 @@
+import json
+import random
+import sys
 from pathlib import Path
 from typing import List
 
+import _jsonnet
+import numpy as np
+import torch
+from allennlp.commands.train import train_model
+from allennlp.common import Params
+from allennlp.data import DatasetReader, Vocabulary, DataLoader
+from allennlp.models import Model
+from allennlp.training import Trainer
 from fire import Fire
 from tqdm import tqdm
 
 from data_utils import Data, Sentence
 from wrapper import SpanModel, safe_divide
+
+
+def set_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def test_load(
+    path: str = "training_config/config.jsonnet",
+    path_train: str = "outputs/14lap/seed_0/temp_data/train.json",
+    path_dev: str = "outputs/14lap/seed_0/temp_data/validation.json",
+    save_dir="outputs/temp",
+):
+    # Register custom modules
+    sys.path.append(".")
+    from span_model.data.dataset_readers.span_model import SpanModelReader
+
+    assert SpanModelReader is not None
+    params = Params.from_file(
+        path,
+        params_overrides=dict(
+            train_data_path=path_train,
+            validation_data_path=path_dev,
+            test_data_path=path_dev,
+        ),
+    )
+
+    train_model(params, serialization_dir=save_dir, force=True)
+    breakpoint()
+
+    config = json.loads(_jsonnet.evaluate_file(path))
+    set_seed(config["random_seed"])
+    reader = DatasetReader.from_params(Params(config["dataset_reader"]))
+    data_train = reader.read(path_train)
+    data_dev = reader.read(path_dev)
+    vocab = Vocabulary.from_instances(data_train + data_dev)
+    model = Model.from_params(Params(config["model"]), vocab=vocab)
+
+    data_train.index_with(vocab)
+    data_dev.index_with(vocab)
+    trainer = Trainer.from_params(
+        Params(config["trainer"]),
+        model=model,
+        data_loader=DataLoader.from_params(
+            Params(config["data_loader"]), dataset=data_train
+        ),
+        validation_data_loader=DataLoader.from_params(
+            Params(config["data_loader"]), dataset=data_dev
+        ),
+        serialization_dir=save_dir,
+    )
+    breakpoint()
+    trainer.train()
+    breakpoint()
 
 
 class Scorer:
@@ -122,56 +188,6 @@ def test_scorer(path_pred: str, path_gold: str):
         print(scorer.name)
         print(scorer.run(path_pred, path_gold))
 
-
-"""
-
-p aste/wrapper.py run_train_many \
---path_train ../cd-aste/outputs/data/span_aste/hotel/train.txt \
---path_dev ../cd-aste/outputs/data/span_aste/hotel/dev.txt \
---save_dir_template "outputs/hotel/seed_{}" \
---random_seeds [0,1,2,3,4]
-
-p aste/analysis.py run_eval_domains \
---path_test_template "../cd-aste/outputs/data/span_aste/{}/test.txt" \
---save_dir_template "outputs/hotel/seed_{}"
-
-hotel {'p': 0.6046356690646132, 'r': 0.558909090909091, 'f': 0.5808738670882764}
-restaurant {'p': 0.5739233685721778, 'r': 0.5038748137108793, 'f': 0.5366227837034503}
-laptop {'p': 0.41013929718152226, 'r': 0.2543720190779014, 'f': 0.3139990503533453}
-
-################################################################################
-
-p aste/wrapper.py run_train_many \
---path_train ../cd-aste/outputs/data/span_aste/restaurant/train.txt \
---path_dev ../cd-aste/outputs/data/span_aste/restaurant/dev.txt \
---save_dir_template "outputs/restaurant/seed_{}" \
---random_seeds [0,1,2,3,4]
-
-p aste/analysis.py run_eval_domains \
---path_test_template "../cd-aste/outputs/data/span_aste/{}/test.txt" \
---save_dir_template "outputs/restaurant/seed_{}"
-
-hotel {'p': 0.5420025318500602, 'r': 0.4458181818181818, 'f': 0.48922760972067975}
-restaurant {'p': 0.6908746977548742, 'r': 0.6566318926974665, 'f': 0.6733182065570285}
-laptop {'p': 0.4815914262002341, 'r': 0.3764705882352941, 'f': 0.4225918510795445}
-
-################################################################################
-
-p aste/wrapper.py run_train_many \
---path_train ../cd-aste/outputs/data/span_aste/laptop/train.txt \
---path_dev ../cd-aste/outputs/data/span_aste/laptop/dev.txt \
---save_dir_template "outputs/laptop/seed_{}" \
---random_seeds [0,1,2,3,4]
-
-p aste/analysis.py run_eval_domains \
---path_test_template "../cd-aste/outputs/data/span_aste/{}/test.txt" \
---save_dir_template "outputs/laptop/seed_{}"
-
-hotel {'p': 0.49103226740943046, 'r': 0.35454545454545455, 'f': 0.41177352223205876}
-restaurant {'p': 0.6083371502063453, 'r': 0.5020864381520119, 'f': 0.5501285025729805}
-laptop {'p': 0.6095129267678342, 'r': 0.5351351351351351, 'f': 0.5699075432675059}
-
-"""
 
 if __name__ == "__main__":
     Fire()
