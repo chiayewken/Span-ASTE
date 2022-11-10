@@ -38,8 +38,10 @@ class SpanModel(Model):
         # New
         span_extractor_type: str = None,
         use_span_width_embeds: bool = None,
+        **kwargs,
     ) -> None:
         super(SpanModel, self).__init__(vocab, regularizer)
+        print(dict(span_model_unused_keys=kwargs.keys()))
 
         # New
         info = dict(
