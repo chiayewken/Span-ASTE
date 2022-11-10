@@ -1,9 +1,11 @@
 import json
 import os
+import sys
+from argparse import Namespace
 from pathlib import Path
 from typing import List
 
-import sys
+from allennlp.commands.predict import _predict
 from allennlp.commands.train import train_model
 from allennlp.common import Params
 from fire import Fire
@@ -12,7 +14,7 @@ from tqdm import tqdm
 
 from data_utils import Data, SentimentTriple, SplitEnum
 from main import SpanModelData, SpanModelPrediction
-from utils import Shell, safe_divide
+from utils import safe_divide
 
 
 class SpanModel(BaseModel):
@@ -61,24 +63,35 @@ class SpanModel(BaseModel):
         train_model(params, serialization_dir=str(weights_dir))
 
     def predict(self, path_in: str, path_out: str):
-        work_dir = Path(".").resolve()
         path_model = Path(self.save_dir) / "weights" / "model.tar.gz"
         path_temp_in = self.save_temp_data(path_in, "pred_in", is_test=True)
         path_temp_out = Path(self.save_dir) / "temp_data" / "pred_out.json"
         if path_temp_out.exists():
             os.remove(path_temp_out)
 
-        shell = Shell()
-        shell.run(
-            f"cd {work_dir} && allennlp predict {path_model}",
-            str(path_temp_in),
-            predictor="span_model",
-            include_package="span_model",
-            use_dataset_reader="",
+        args = Namespace(
+            archive_file=str(path_model),
+            input_file=str(path_temp_in),
             output_file=str(path_temp_out),
+            weights_file="",
+            batch_size=1,
+            silent=True,
             cuda_device=0,
-            silent="",
+            use_dataset_reader=True,
+            dataset_reader_choice="validation",
+            overrides="",
+            predictor="span_model",
+            file_friendly_logging=False,
         )
+
+        # Register custom modules
+        sys.path.append(".")
+        from span_model.data.dataset_readers.span_model import SpanModelReader
+        from span_model.predictors.span_model import SpanModelPredictor
+
+        assert SpanModelReader is not None
+        assert SpanModelPredictor is not None
+        _predict(args)
 
         with open(path_temp_out) as f:
             preds = [SpanModelPrediction(**json.loads(line.strip())) for line in f]
