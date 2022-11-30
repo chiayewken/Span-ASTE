@@ -88,6 +88,13 @@ python aste/wrapper.py run_eval_many \
 --path_test data/triplet_data/14lap/test.txt
 ```
 
+- To run scoring on your own prediction file from command-line, you can use the following command:
+- Replace `14lap` for other datasets (eg `14res`, `15res`, `16res`)
+
+```
+python aste/wrapper.py run_score --path_pred your_file --path_gold data/triplet_data/14lap/test.txt
+```
+
 ### Research Citation
 If the code is useful for your research project, we appreciate if you cite the following paper:
 ```

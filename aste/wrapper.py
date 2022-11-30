@@ -191,7 +191,8 @@ class SpanModel(BaseModel):
         )
         data.save_to_path(path_out)
 
-    def score(self, path_pred: str, path_gold: str) -> dict:
+    @classmethod
+    def score(cls, path_pred: str, path_gold: str) -> dict:
         pred = Data.load_from_full_path(path_pred)
         gold = Data.load_from_full_path(path_gold)
         assert pred.sentences is not None
@@ -220,6 +221,10 @@ class SpanModel(BaseModel):
             score=safe_divide(2 * precision * recall, precision + recall),
         )
         return info
+
+
+def run_score(path_pred: str, path_gold: str) -> dict:
+    return SpanModel.score(path_pred, path_gold)
 
 
 def run_train(path_train: str, path_dev: str, save_dir: str, random_seed: int):
