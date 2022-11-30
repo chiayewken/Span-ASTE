@@ -11,7 +11,7 @@
 This repository implements our ACL 2021 research paper [Learning Span-Level Interactions for Aspect Sentiment Triplet Extraction](https://aclanthology.org/2021.acl-long.367/). 
 Our goal is to extract sentiment triplets of the format `(aspect target, opinion expression and sentiment polarity)`, as shown in the diagram below. 
 
-<img src="https://github.com/chiayewken/Span-ASTE/blob/13a851b166998210a7cd2def5fa4aff20819b54d/assets/task_image.png" width="450" height="150">
+<img src="https://github.com/chiayewken/Span-ASTE/blob/13a851b166998210a7cd2def5fa4aff20819b54d/assets/task_image.png" width="450" height="150" alt="">
 
 ### Installation
 
@@ -57,6 +57,17 @@ model = SpanModel(save_dir=save_dir, random_seed=random_seed)
 model.fit(path_train, path_dev)
 ```
 
+- To train with multiple random seeds from the command-line, you can use the following command:
+- Replace `14lap` for other datasets (eg `14res`, `15res`, `16res`)
+
+```
+python aste/wrapper.py run_train_many \
+--save_dir_template "outputs/14lap/seed_{}" \
+--random_seeds [0,1,2,3,4] \
+--path_train data/triplet_data/14lap/train.txt \
+--path_dev data/triplet_data/14lap/dev.txt
+```
+
 ### Model Evaluation
 
 - From the trained model, predict triplets from the test sentences and output into `path_pred`.
@@ -65,6 +76,16 @@ model.fit(path_train, path_dev)
 ```
 model.predict(path_in=path_test, path_out=path_pred)
 results = model.score(path_pred, path_test)
+```
+
+- To evaluate with multiple random seeds from the command-line, you can use the following command:
+- Replace `14lap` for other datasets (eg `14res`, `15res`, `16res`)
+
+```
+python aste/wrapper.py run_eval_many \
+--save_dir_template "outputs/14lap/seed_{}" \
+--random_seeds [0,1,2,3,4] \
+--path_test data/triplet_data/14lap/test.txt
 ```
 
 ### Research Citation
