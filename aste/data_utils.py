@@ -12,9 +12,7 @@ import pandas as pd
 from fire import Fire
 from pydantic import BaseModel
 from sklearn.metrics import classification_report
-from sklearn.model_selection import train_test_split
 
-from evaluation import LinearInstance, TagReader, nereval
 from utils import count_joins, get_simple_stats
 
 RawTriple = Tuple[List[int], int, int, int, int]
@@ -173,25 +171,6 @@ class Sentence(BaseModel):
             spans.append((t.t_start, t.t_end, LabelEnum.target))
         spans = sorted(set(spans))
         return spans
-
-    @classmethod
-    def from_instance(cls, x: LinearInstance):
-        sentence = cls(
-            tokens=x.input,
-            weight=x.weight,
-            pos=x.output[0],
-            id=x.instance_id,
-            triples=[SentimentTriple.from_raw_triple(o) for o in x.output[1]],
-            is_labeled=x.is_labeled,
-        )
-        assert vars(x) == vars(sentence.to_instance())
-        return sentence
-
-    def to_instance(self) -> LinearInstance:
-        output = (self.pos, [t.to_raw_triple() for t in self.triples])
-        instance = LinearInstance(self.id, self.weight, self.tokens, output)
-        instance.is_labeled = self.is_labeled
-        return instance
 
     def as_text(self) -> str:
         tokens = list(self.tokens)
@@ -457,30 +436,6 @@ class Data(BaseModel):
         print("#" * 80)
 
 
-def test_from_line_format(path: str = "aste/data/triplet_data/14lap/train.txt"):
-    print("\nCompare old TagReader with new Sentence.from_line_format")
-    instances = TagReader.read_inst(
-        file=path,
-        is_labeled=False,
-        number=-1,
-        opinion_offset=3,
-    )
-    a = Data(
-        root=Path(),
-        data_split=SplitEnum.test,
-        sentences=[Sentence.from_instance(x) for x in instances],
-    )
-
-    assert a.sentences is not None
-    with open(path) as f:
-        for i, line in enumerate(f):
-            s = Sentence.from_line_format(line)
-            assert s.tokens == a.sentences[i].tokens
-            set_a = set(t.json() for t in a.sentences[i].triples)
-            set_b = set(t.json() for t in s.triples)
-            assert set_a == set_b
-
-
 def test_save_to_path(path: str = "aste/data/triplet_data/14lap/train.txt"):
     print("\nEnsure that Data.save_to_path works properly")
     path_temp = "temp.txt"
@@ -626,20 +581,6 @@ class ResultAnalyzer(BaseModel):
         r.f_score = round(2 * r.precision * r.recall / (r.precision + r.recall + e), 3)
         print(r.json(indent=2))
         cls.analyze_spans(pred, gold)
-
-
-def test_aste(root="aste/data/triplet_data"):
-    for folder in Path(root).iterdir():
-        scorer = nereval()
-        data = Data(root=folder, data_split=SplitEnum.train)
-        data.load()
-        data.analyze()
-
-        instances = [s.to_instance() for s in data.sentences]
-        for i in instances:
-            i.set_prediction(i.output)
-        print(dict(score=str(scorer.eval(instances))))
-        print(SentimentTriple.from_raw_triple(instances[0].output[1][0]))
 
 
 def test_merge(root="aste/data/triplet_data"):
