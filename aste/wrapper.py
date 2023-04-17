@@ -145,7 +145,8 @@ class SpanModel(BaseModel):
         )
 
         # Register custom modules
-        sys.path.append(".")
+        import os
+        os.chdir("..")
         from span_model.data.dataset_readers.span_model import SpanModelReader
 
         assert SpanModelReader is not None
@@ -174,7 +175,7 @@ class SpanModel(BaseModel):
         )
 
         # Register custom modules
-        sys.path.append(".")
+        os.chdir("..")
         from span_model.data.dataset_readers.span_model import SpanModelReader
         from span_model.predictors.span_model import SpanModelPredictor
 
